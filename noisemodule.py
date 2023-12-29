@@ -861,7 +861,7 @@ class ScalePoint(NoiseModule):
             ya *= self.sy
             za *= self.sz
 
-            return self.soruce0.get_values(width, height, 0,0, 0,0, 0,0, use_arrays=[xa,ya,za])
+            return self.source0.get_values(width, height, 0,0, 0,0, 0,0, use_arrays=[xa,ya,za])
 
 class Select(NoiseModule):
     """
