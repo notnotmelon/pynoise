@@ -679,6 +679,85 @@ class Power(NoiseModule):
 
         return np.power(a, b)
 
+class Seamless(NoiseModule):
+    """Makes a noise seamlessly tileable in X, Y, and Z directions"""
+    def __init__(self, source0):
+        self.source0 = source0
+
+    @lru_cache(maxsize=32)
+    def get_values(self, width, height, min_x, max_x, min_y, max_y, min_z, max_z=None, use_arrays=None):
+        x_extent = max_x - min_x
+        z_extent = max_z - min_z
+        x_delta = x_extent / width
+        z_delta = z_extent / height
+
+        se = self.source0.get_values(width, height, max_x+x_delta, max_x+x_extent+x_delta, min_y, max_y, min_z, max_z)
+        sw = self.source0.get_values(width, height, min_x, max_x, min_y, max_y, min_z, max_z)
+        nw = self.source0.get_values(width, height, min_x, max_x, min_y, max_y, max_z+z_delta, max_z+z_extent+z_delta)
+        ne = self.source0.get_values(width, height, max_x+x_delta, max_x+x_extent+x_delta, min_y, max_y, max_z+z_delta, max_z+z_extent+z_delta)
+
+        x_blend = np.zeros(width*height)
+        z_blend = np.zeros(width*height)
+
+        i = 0
+        z_cur = min_z
+        for x in range(width):
+            x_cur = min_x
+            for z in range(height):
+                x_blend[i] = 1 - ((x_cur - min_x) / x_extent)
+                z_blend[i] = 1 - ((z_cur - min_z) / z_extent)
+                x_cur += x_delta
+                i += 1
+            z_cur += z_delta
+
+        z0 = gpu.linear_interp(sw, se, x_blend)
+        z1 = gpu.linear_interp(nw, ne, x_blend)
+
+        return gpu.linear_interp(z0, z1, z_blend)
+    
+class Loopable(NoiseModule):
+    """ For animations. Adds seamless tiling along the Y axis (time axis) """
+    def __init__(self, source0, max_time):
+        self.source0 = source0
+        self.max_time = max_time
+
+    def get_values(self, width, height, min_x, max_x, min_y, max_y, min_z, max_z=None, use_arrays=None):
+        y = (min_y + max_y) / 2
+
+        top = self.source0.get_values(width, height, min_x, max_x, y, y, min_z, max_z, use_arrays)
+        bottom = self.source0.get_values(width, height, min_x, max_x, y + self.max_time, y + self.max_time, min_z, max_z, use_arrays)
+        
+        y_blend = np.ones(width*height) * (1 - y / self.max_time)
+        return gpu.linear_interp(top, bottom, y_blend)
+
+class SeamlessVariants(NoiseModule):
+    """ Creates tileable variants of seamless noise by combining 1 seamless noise 
+    layer and 1 nonseamless noise layer in linear combination """
+    def __init__(self, source0, source1):
+        self.source0 = source0
+        self.source1 = source1
+
+    def get_value(self, x, y, z):
+        return 'unimplemented'
+    
+    def get_values(self, width, height, min_x, max_x, min_y, max_y, min_z, max_z=None, use_arrays=None):
+        assert self.source0 is not None
+        assert self.source1 is not None
+
+        a = self.source0.get_values(width, height, min_x, max_x, min_y, max_y, min_z, max_z, use_arrays)
+        b = self.source1.get_values(width, height, min_x, max_x, min_y, max_y, min_z, max_z, use_arrays)
+
+        blend_x = np.append(np.linspace(start=0, stop=1, num=width//2), np.linspace(start=1, stop=0, num=width//2))
+        blend_z = np.append(np.linspace(start=0, stop=1, num=height//2), np.linspace(start=1, stop=0, num=height//2))
+        blend = np.zeros(width * height)
+        i = 0
+        for x in range(width):
+            for z in range(height):
+                blend[i] = blend_x[x] * blend_z[z]
+                i += 1
+
+        return gpu.linear_interp(a, b, blend)
+
 class RidgedMulti(NoiseModule):
     """ This is much like perlin noise, however each octave is modified by
     abs(x*-exponent) where x is x *= frequency repeated over each octave. """

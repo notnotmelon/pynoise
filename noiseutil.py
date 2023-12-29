@@ -146,57 +146,15 @@ def noise_map_plane(width=0, height=0, lower_x=0, upper_x=0, lower_z=0, upper_z=
 
     return nm
 
-def noise_map_plane_gpu(width=0, height=0, lower_x=0, upper_x=0, lower_z=0, upper_z=0,
-    source=None, seamless=False, y=0, y_max=0):
+# for animations: lower y is the current time. upper y is the max possible time
+def noise_map_plane_gpu(width=0, height=0, lower_x=0, upper_x=0, lower_y=0, upper_y=0, lower_z=0, upper_z=0, source=None):
     assert lower_x < upper_x
     assert lower_z < upper_z
     assert width > 0
     assert height > 0
     assert source is not None
 
-    if not seamless:
-        return source.get_values(width, height, lower_x, upper_x, y, y, lower_z, upper_z)
-    else:
-        x_extent = upper_x - lower_x
-        z_extent = upper_z - lower_z
-        x_delta = x_extent / width
-        z_delta = z_extent / height
-
-        se = source.get_values(width, height, upper_x+x_delta, upper_x+x_extent+x_delta, y, y, lower_z, upper_z)
-        sw = source.get_values(width, height, lower_x, upper_x, y, y, lower_z, upper_z)
-        nw = source.get_values(width, height, lower_x, upper_x, y, y, upper_z+z_delta, upper_z+z_extent+z_delta)
-        ne = source.get_values(width, height, upper_x+x_delta, upper_x+x_extent+x_delta, y, y, upper_z+z_delta, upper_z+z_extent+z_delta)
-        yy = y + y_max
-        sey = source.get_values(width, height, upper_x+x_delta, upper_x+x_extent+x_delta, yy, yy, lower_z, upper_z)
-        swy = source.get_values(width, height, lower_x, upper_x, yy, yy, lower_z, upper_z)
-        nwy = source.get_values(width, height, lower_x, upper_x, yy, yy, upper_z+z_delta, upper_z+z_extent+z_delta)
-        ney = source.get_values(width, height, upper_x+x_delta, upper_x+x_extent+x_delta, yy, yy, upper_z+z_delta, upper_z+z_extent+z_delta)
-
-        x_blend = np.zeros(width*height)
-        y_blend = np.zeros(width*height)
-        z_blend = np.zeros(width*height)
-
-        i = 0
-        z_cur = lower_z
-        for x in range(width):
-            x_cur = lower_x
-            for z in range(height):
-                x_blend[i] = 1 - ((x_cur - lower_x) / x_extent)
-                y_blend[i] = 1 - y / y_max
-                z_blend[i] = 1 - ((z_cur - lower_z) / z_extent)
-                x_cur += x_delta
-                i += 1
-            z_cur += z_delta
-
-        z0 = gpu.linear_interp(sw, se, x_blend)
-        z1 = gpu.linear_interp(nw, ne, x_blend)
-        z2 = gpu.linear_interp(swy, sey, x_blend)
-        z3 = gpu.linear_interp(nwy, ney, x_blend)
-
-        z4 = gpu.linear_interp(z0, z1, z_blend)
-        z5 = gpu.linear_interp(z2, z3, z_blend)
-
-        return gpu.linear_interp(z4, z5, y_blend)
+    return source.get_values(width, height, lower_x, upper_x, lower_y, upper_y, lower_z, upper_z)
 
 def noise_map_sphere(width=0, height=0, east_bound=0, west_bound=0,
     north_bound=0, south_bound=0, source=None):
