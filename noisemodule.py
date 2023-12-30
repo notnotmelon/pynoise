@@ -753,7 +753,7 @@ class SeamlessVariants(NoiseModule):
         i = 0
         for x in range(width):
             for z in range(height):
-                blend[i] = blend_x[x] * blend_z[z]
+                blend[i] = min(1, (blend_x[x] * blend_z[z]) * 2)
                 i += 1
 
         return gpu.linear_interp(a, b, blend)
